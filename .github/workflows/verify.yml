@@ -17,16 +17,11 @@ jobs:
           unzip -q h.ipa -d ex
           APP=ex/Payload/Husk.app
           echo "--- bundle ---"
-          ls "$APP" | head -20
+          ls "$APP" | head -25
           echo "--- info ---"
-          python3 -c "
-import plistlib,sys
-p=plistlib.load(open('$APP/Info.plist','rb'))
-for k in ['CFBundleIdentifier','CFBundleShortVersionString','CFBundleVersion','MinimumOSVersion','HuskBuildCommit','HuskBuildDate']:
-    print(k, '=', p.get(k))
-"
-          echo "--- chinese strings in binary ---"
-          strings "$APP/Husk" | grep -c '[一-龥]' || true
-          strings "$APP/Husk" | grep -m 8 '[一-龥]'
-          echo "--- qemu dylib ---"
-          ls -l "$APP/Frameworks" | head
+          python3 -c "import plistlib,sys; p=plistlib.load(open('$APP/Info.plist','rb')); [print(k,'=',p.get(k)) for k in ['CFBundleIdentifier','CFBundleShortVersionString','CFBundleVersion','MinimumOSVersion','HuskBuildCommit','HuskBuildDate']]"
+          echo "--- chinese string count in binary ---"
+          strings "$APP/Husk" | grep -c '[^ -~]' || true
+          strings "$APP/Husk" | grep -m 10 '[一-龥]' || true
+          echo "--- frameworks ---"
+          ls -l "$APP/Frameworks" | head -12
