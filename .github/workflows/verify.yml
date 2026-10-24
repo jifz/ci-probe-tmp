@@ -11,8 +11,8 @@ jobs:
           PAT: ${{ secrets.HUSK_PAT }}
         run: |
           set -e
-          curl -sSL -H "Authorization: token $PAT" -o h.ipa \
-            https://github.com/jifz/Husk-ZH/releases/download/zh-3.0/Husk-zh.ipa
+          curl -sSL -H "Authorization: token $PAT" -H "Accept: application/octet-stream" -o h.ipa \
+            https://api.github.com/repos/jifz/Husk-ZH/releases/assets/671787119
           ls -l h.ipa
           unzip -q h.ipa -d ex
           APP=ex/Payload/Husk.app
