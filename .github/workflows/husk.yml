@@ -33,7 +33,8 @@ jobs:
       - name: Host tooling
         run: |
           set -x
-          brew install meson ninja pkg-config xcodegen cmake || true
+          brew install meson ninja pkg-config xcodegen cmake qemu || true
+          which qemu-img && qemu-img --version | head -1
           /opt/homebrew/bin/python3 -m pip install --break-system-packages --quiet pyyaml || pip3 install --break-system-packages pyyaml || true
           /opt/homebrew/bin/python3 -c "import yaml; print('yaml ok')"
           which meson ninja pkg-config xcodegen cmake
