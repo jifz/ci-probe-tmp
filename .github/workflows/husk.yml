@@ -1,0 +1,88 @@
+name: husk
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "upstream | private"
+        default: upstream
+        type: choice
+        options: [upstream, private]
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 350
+    steps:
+      - name: Fetch source
+        env:
+          PAT: ${{ secrets.HUSK_PAT }}
+        run: |
+          set -e
+          if [ "${{ inputs.source }}" = "private" ]; then
+            curl -sSL -H "Authorization: token $PAT" \
+              https://api.github.com/repos/jifz/Husk-ZH/tarball/main -o src.tgz
+          else
+            curl -sSL https://codeload.github.com/Leviidev/Husk/tar.gz/refs/heads/main -o src.tgz
+          fi
+          mkdir -p src && tar xzf src.tgz -C src --strip-components=1
+          cd src && git init -q && git add -A >/dev/null 2>&1 || true
+          git -c user.email=b@b -c user.name=b commit -qm snapshot || true
+          du -sh . ; ls
+
+      - name: Host tooling
+        run: |
+          set -x
+          brew install meson ninja pkg-config xcodegen || true
+          which meson ninja pkg-config xcodegen || pip3 install --break-system-packages meson ninja
+          rustup target add aarch64-apple-ios || true
+          meson --version; ninja --version; xcodegen --version || true
+
+      - name: Cache tarballs
+        uses: actions/cache@v4
+        with:
+          path: src/third_party/sources
+          key: husk-sources-v1
+
+      - name: Cache build trees
+        uses: actions/cache@v4
+        with:
+          path: |
+            src/third_party/build
+            src/build
+          key: husk-build-v1-${{ github.run_id }}
+          restore-keys: husk-build-v1-
+
+      - name: Build
+        working-directory: src
+        run: |
+          set -o pipefail
+          date
+          ./scripts/ci_build.sh "$PWD/out/Husk.ipa" 2>&1 | tee build-all.log | tail -n 500
+          date
+
+      - name: Logs on failure
+        if: failure() || cancelled()
+        working-directory: src
+        run: |
+          tail -n 120 build-all.log || true
+          for f in build/logs/*.log; do echo "##### $f"; tail -n 80 "$f"; done || true
+
+      - name: Upload IPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: husk-ipa
+          path: |
+            src/out/Husk.ipa
+            src/out/Husk.tipa
+          if-no-files-found: error
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: husk-log
+          path: |
+            src/build-all.log
+            src/build/logs
+          if-no-files-found: warn
