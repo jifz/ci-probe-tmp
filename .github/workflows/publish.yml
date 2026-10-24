@@ -1,0 +1,60 @@
+name: publish
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_id:
+        description: "artifact id holding the IPA"
+        default: "12553512884"
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Fetch artifact
+        env:
+          PAT: ${{ secrets.HUSK_PAT }}
+        run: |
+          set -e
+          curl -sSL -H "Authorization: token $PAT" \
+            "https://api.github.com/repos/jifz/ci-probe-tmp/actions/artifacts/${{ inputs.artifact_id }}/zip" -o a.zip
+          ls -l a.zip
+          mkdir -p out && unzip -o -q a.zip -d out
+          ls -l out
+
+      - name: Create release + upload asset
+        env:
+          PAT: ${{ secrets.HUSK_PAT }}
+        run: |
+          set -e
+          SHA=$(curl -sS -H "Authorization: token $PAT" https://api.github.com/repos/jifz/Husk-ZH/commits/main | python3 -c "import json,sys;print(json.load(sys.stdin)['sha'])")
+          BODY=$(printf '%s' 'Husk 3.0 简体中文版（界面文案已本地化）。未签名，请用 SideStore / AltStore / TrollStore 安装。')
+          REL=$(python3 - "$SHA" "$BODY" <<'PY'
+import json, os, sys, urllib.request
+sha, body = sys.argv[1], sys.argv[2]
+tok = os.environ['PAT']
+payload = {"tag_name": "zh-3.0", "name": "Husk 3.0 简体中文版", "body": body,
+           "target_commitish": sha, "draft": False, "prerelease": False}
+req = urllib.request.Request("https://api.github.com/repos/jifz/Husk-ZH/releases",
+    data=json.dumps(payload).encode(), method='POST',
+    headers={"Authorization": "token " + tok, "Accept": "application/vnd.github+json",
+             "Content-Type": "application/json"})
+try:
+    d = json.load(urllib.request.urlopen(req))
+    print(d["id"], d["upload_url"].split("{")[0], sep="\n")
+except Exception as e:
+    print("ERR", e, e.read()[:300] if hasattr(e, 'read') else "", file=sys.stderr)
+    sys.exit(1)
+PY
+)
+          RID=$(echo "$REL" | head -1)
+          UPLOAD=$(echo "$REL" | tail -1)
+          echo "release $RID"
+          for f in out/Husk.ipa out/Husk.tipa; do
+            [ -f "$f" ] || continue
+            name=$(basename "$f" | sed 's/Husk/Husk-zh/')
+            curl -sS -X POST -H "Authorization: token $PAT" -H "Content-Type: application/zip" \
+              --data-binary @"$f" "$UPLOAD?name=$name" -o /dev/null -w "$name %{http_code}\n"
+          done
+          echo "https://github.com/jifz/Husk-ZH/releases/tag/zh-3.0"
