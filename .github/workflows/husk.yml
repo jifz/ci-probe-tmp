@@ -53,6 +53,21 @@ jobs:
           key: husk-v2-${{ github.run_id }}
           restore-keys: husk-v2-
 
+      - name: Seed prebuilt PS4 layer
+        working-directory: src
+        run: |
+          set -e
+          if [ -f build/ios-arm64/lib/libhuskps4.dylib ]; then echo "libhuskps4 already present"; exit 0; fi
+          curl -fL --retry 3 -o official.ipa https://github.com/Leviidev/Husk/releases/download/3.0/Husk.ipa
+          mkdir -p off && unzip -q official.ipa -d off
+          APP=off/Payload/Husk.app
+          mkdir -p build/ios-arm64/lib
+          cp "$APP/Frameworks/libhuskps4.dylib" build/ios-arm64/lib/
+          if [ -d "$APP/java-runtime" ]; then rm -rf build/java-runtime; cp -R "$APP/java-runtime" build/java-runtime; fi
+          if [ -d "$APP/android-system" ]; then rm -rf build/android-system; cp -R "$APP/android-system" build/android-system; fi
+          rm -rf off official.ipa
+          ls -la build/ios-arm64/lib/
+
       - name: Build
         working-directory: src
         run: |
