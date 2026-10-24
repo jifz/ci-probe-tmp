@@ -4,7 +4,7 @@ on:
     inputs:
       source:
         description: "upstream | private"
-        default: upstream
+        default: private
         type: choice
         options: [upstream, private]
 
@@ -19,53 +19,65 @@ jobs:
         run: |
           set -e
           if [ "${{ inputs.source }}" = "private" ]; then
-            curl -sSL -H "Authorization: token $PAT" \
-              https://api.github.com/repos/jifz/Husk-ZH/tarball/main -o src.tgz
+            curl -fsSL -H "Authorization: token $PAT" \
+              https://codeload.github.com/jifz/Husk-ZH/tar.gz/refs/heads/main -o src.tgz
           else
-            curl -sSL https://codeload.github.com/Leviidev/Husk/tar.gz/refs/heads/main -o src.tgz
+            curl -fsSL https://codeload.github.com/Leviidev/Husk/tar.gz/refs/heads/main -o src.tgz
           fi
+          file src.tgz 2>/dev/null || ls -l src.tgz
           mkdir -p src && tar xzf src.tgz -C src --strip-components=1
           cd src && git init -q && git add -A >/dev/null 2>&1 || true
-          git -c user.email=b@b -c user.name=b commit -qm snapshot || true
+          git -c user.email=b@b -c user.name=b commit -qm snapshot >/dev/null 2>&1 || true
           du -sh . ; ls
 
       - name: Host tooling
         run: |
           set -x
-          brew install meson ninja pkg-config xcodegen || true
-          which meson ninja pkg-config xcodegen || pip3 install --break-system-packages meson ninja
+          brew install meson ninja pkg-config xcodegen cmake || true
+          /opt/homebrew/bin/python3 -m pip install --break-system-packages --quiet pyyaml || pip3 install --break-system-packages pyyaml || true
+          /opt/homebrew/bin/python3 -c "import yaml; print('yaml ok')"
+          which meson ninja pkg-config xcodegen cmake
           rustup target add aarch64-apple-ios || true
-          meson --version; ninja --version; xcodegen --version || true
+          meson --version; ninja --version
 
-      - name: Cache tarballs
-        uses: actions/cache@v4
-        with:
-          path: src/third_party/sources
-          key: husk-sources-v1
-
-      - name: Cache build trees
-        uses: actions/cache@v4
+      - name: Restore caches
+        id: cache
+        uses: actions/cache/restore@v4
         with:
           path: |
+            src/third_party/sources
             src/third_party/build
             src/build
-          key: husk-build-v1-${{ github.run_id }}
-          restore-keys: husk-build-v1-
+            src/third_party/gpu
+          key: husk-v2-${{ github.run_id }}
+          restore-keys: husk-v2-
 
       - name: Build
         working-directory: src
         run: |
           set -o pipefail
           date
-          ./scripts/ci_build.sh "$PWD/out/Husk.ipa" 2>&1 | tee build-all.log | tail -n 500
+          ./scripts/ci_build.sh "$PWD/out/Husk.ipa" 2>&1 | tee build-all.log | tail -n 400
           date
+
+      - name: Save cache
+        if: always()
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: |
+            src/third_party/sources
+            src/third_party/build
+            src/build
+            src/third_party/gpu
+          key: husk-v2-${{ github.run_id }}
 
       - name: Logs on failure
         if: failure() || cancelled()
         working-directory: src
         run: |
           tail -n 120 build-all.log || true
-          for f in build/logs/*.log; do echo "##### $f"; tail -n 80 "$f"; done || true
+          for f in build/logs/*.log; do echo "##### $f"; tail -n 60 "$f"; done || true
 
       - name: Upload IPA
         if: success()
